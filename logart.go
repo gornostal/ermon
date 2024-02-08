@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"net/smtp"
 	"os"
 	"strings"
 	"sync"
@@ -27,7 +28,7 @@ func sendLogsByEmail() {
 
 	if len(logBuffer) > 0 && (lastRun || (!timeSinceError.IsZero() && time.Since(timeSinceError) > runningTimeWindow)) {
 		emailBuffer = append(emailBuffer, logBuffer)
-		logBuffer = logBuffer[:0]
+		logBuffer = nil
 	}
 
 	if len(emailBuffer) == 0 {
@@ -40,21 +41,31 @@ func sendLogsByEmail() {
 	timeSinceError = time.Time{}
 	localEmailBuffer := make([][]string, len(emailBuffer))
 	copy(localEmailBuffer, emailBuffer)
-	emailBuffer = emailBuffer[:0]
+	emailBuffer = nil
 	lastErrorLineIndex = 0
 
 	mutex.Unlock()
 
 	fmt.Println("...Sending email...")
-	for _, buf := range localEmailBuffer {
+	errors := ""
+	for i, buf := range localEmailBuffer {
 		for _, line := range buf {
 			if len(strings.TrimSpace(line)) == 0 {
 				continue
 			}
 			fmt.Println(line)
+			if strings.Contains(line, "error") {
+				errors += "<b>" + line + "</b>\n"
+			} else {
+				errors += line + "\n"
+			}
 		}
-		fmt.Println("...")
+		if i < len(localEmailBuffer)-1 {
+			errors += "<br />***<br />\n"
+			fmt.Println("...")
+		}
 	}
+	sendErrorsByEmail(errors)
 	fmt.Println("...End of email...")
 
 }
@@ -90,7 +101,7 @@ func readLogs(r io.Reader) {
 		if bufferIsFull {
 			// wait for the logBuffers to be consumed
 			if len(logBuffer) > 0 {
-				logBuffer = logBuffer[:0]
+				logBuffer = nil
 			}
 			continue
 		}
@@ -118,7 +129,7 @@ func readLogs(r io.Reader) {
 			if lastErrorLineIndex == 0 || (i-lastErrorLineIndex) > contextSize {
 				if len(logBuffer) > 0 {
 					emailBuffer = append(emailBuffer, logBuffer)
-					logBuffer = logBuffer[:0]
+					logBuffer = nil
 				}
 				logBuffer = append(logBuffer, last3lines[:]...)
 			}
@@ -131,6 +142,51 @@ func readLogs(r io.Reader) {
 		fmt.Println("[logart] Scanner error:", err)
 	}
 }
+
+func sendErrorsByEmail(errors string) {
+	from := "xxx"
+	password := "xxx"
+	to := []string{
+		"xxx",
+	}
+	smtpHost := "email-smtp.us-east-1.amazonaws.com"
+	smtpPort := "587"
+	body := strings.Replace(mailTemplate, "{errors}", errors, -1)
+	message := []byte("From: " + from + "\r\n" +
+		"To: " + to[0] + "\r\n" +
+		"Subject: Errors in your logs\r\n" +
+		"Content-Type: text/html; charset=UTF-8\r\n\r\n" +
+		body + "\r\n")
+
+	auth := smtp.PlainAuth("", "awsusername", password, smtpHost)
+
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, to, message)
+	if err != nil {
+		fmt.Println("[logart] SendMail error:", err)
+		return
+	}
+}
+
+var mailTemplate = `
+<html>
+  <meta charset="utf-8" />
+  <body style="background-color: #f4f5f6">
+    <div style="margin: 0; background-color: #f4f5f6; padding: 30px; font-family: sans-serif;">
+      <div
+        style="background-color: #fff; padding: 20px; border-radius: 4px; font-size: 15px; color: #000;">
+        <pre style="font-family: monospace">
+{errors}
+        </pre>
+      </div>
+      <div
+        style="margin-top: 20px; padding: 10px; font-size: 15px; color: #9a9ea6; text-align: center;">
+        This email alert was produced by
+        <a href="https://github.com/gornostal/logart" style="color: #9a9ea6; text-decoration: underline">logart</a>.
+      </div>
+    </div>
+  </body>
+</html>
+`
 
 func main() {
 	go watchLogBuffer()
