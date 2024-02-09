@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-var mutex = &sync.Mutex{}
-var startupTime = time.Now() // todo: don't send emails if the app has been running for less than 1 minute
+var mutex = &sync.Mutex{}    // needed for concurrent access to the emailBuffer
+var startupTime = time.Now() // uses this time so we don't send emails if the app crashes while running for less than 1 minute
 const runningTimeWindow = time.Minute / 4
 const maxEmailBufferSize = 5
 const maxLogBufferSize = 15
 
-var lastRun bool = false
+var finalRun bool = false
 var timeSinceError time.Time
 var emailBuffer [][]string
 var logBuffer []string
@@ -26,59 +26,58 @@ var lastErrorLineIndex uint64 = 0
 func sendLogsByEmail() {
 	mutex.Lock()
 
-	if len(logBuffer) > 0 && (lastRun || (!timeSinceError.IsZero() && time.Since(timeSinceError) > runningTimeWindow)) {
+	if len(logBuffer) > 0 && (finalRun || (!timeSinceError.IsZero() && time.Since(timeSinceError) > runningTimeWindow)) {
 		emailBuffer = append(emailBuffer, logBuffer)
 		logBuffer = nil
 	}
 
+	// don't send email if the app has been running for less than 1 minute and then crashed
+	// if finalRun && time.Since(startupTime) < time.Minute {
+	// 	mutex.Unlock()
+	// 	return
+	// }
+
 	if len(emailBuffer) == 0 {
 		mutex.Unlock()
-		// fmt.Println("(No logs to send)")
 		return
 	}
 
 	// reset
 	timeSinceError = time.Time{}
-	localEmailBuffer := make([][]string, len(emailBuffer))
-	copy(localEmailBuffer, emailBuffer)
-	emailBuffer = nil
 	lastErrorLineIndex = 0
 
-	mutex.Unlock()
-
-	fmt.Println("...Sending email...")
 	errors := ""
-	for i, buf := range localEmailBuffer {
+	for i, buf := range emailBuffer {
 		for _, line := range buf {
 			if len(strings.TrimSpace(line)) == 0 {
 				continue
 			}
-			fmt.Println(line)
 			if strings.Contains(line, "error") {
 				errors += "<b>" + line + "</b>\n"
 			} else {
 				errors += line + "\n"
 			}
 		}
-		if i < len(localEmailBuffer)-1 {
-			errors += "<br />***<br />\n"
-			fmt.Println("...")
+		if i < len(emailBuffer)-1 {
+			errors += "<br />\n"
 		}
 	}
-	sendErrorsByEmail(errors)
-	fmt.Println("...End of email...")
 
+	emailBuffer = nil
+	mutex.Unlock()
+
+	sendErrorsByEmail(errors)
 }
 
 func watchLogBuffer() {
 	for {
 		sendLogsByEmail()
 
-		if lastRun {
+		if finalRun {
 			return
 		}
 
-		time.Sleep(time.Second * 1)
+		time.Sleep(time.Second)
 	}
 }
 
@@ -106,19 +105,6 @@ func readLogs(r io.Reader) {
 			continue
 		}
 
-		// maintain a buffer of last 3 lines
-		if len(last3lines) >= 3 {
-			copy(last3lines[:], last3lines[1:])
-			last3lines[2] = line
-		} else {
-			last3lines[len(logBuffer)] = line
-		}
-
-		// add a bit of context after an error
-		if lastErrorLineIndex > 0 && (i-lastErrorLineIndex) <= contextSize {
-			logBuffer = append(logBuffer, line)
-		}
-
 		if strings.Contains(line, "error") {
 			// record the time so we can track number of errors per configured time period
 			// this time will be reset when email is sent
@@ -132,37 +118,51 @@ func readLogs(r io.Reader) {
 					logBuffer = nil
 				}
 				logBuffer = append(logBuffer, last3lines[:]...)
+				logBuffer = append(logBuffer, line)
 			}
 
 			lastErrorLineIndex = i
 		}
+
+		// maintain a buffer of last 3 lines
+		if len(last3lines) >= 3 {
+			copy(last3lines[:], last3lines[1:])
+			last3lines[2] = line
+		} else {
+			last3lines[len(logBuffer)] = line
+		}
+
+		// add a bit of context after an error
+		if lastErrorLineIndex > 0 && lastErrorLineIndex != i && (i-lastErrorLineIndex) <= contextSize {
+			logBuffer = append(logBuffer, line)
+		}
+
 	}
 
 	if err := scanner.Err(); err != nil {
-		fmt.Println("[logart] Scanner error:", err)
+		fmt.Println("[ermon] Scanner error:", err)
 	}
 }
 
 func sendErrorsByEmail(errors string) {
 	from := "xxx"
 	password := "xxx"
-	to := []string{
-		"xxx",
-	}
+	to := "xxx"
+	appname := "xxx"
 	smtpHost := "email-smtp.us-east-1.amazonaws.com"
 	smtpPort := "587"
 	body := strings.Replace(mailTemplate, "{errors}", errors, -1)
 	message := []byte("From: " + from + "\r\n" +
-		"To: " + to[0] + "\r\n" +
-		"Subject: Errors in your logs\r\n" +
+		"To: " + to + "\r\n" +
+		"Subject: [" + appname + "] You've got XX errors in the last YY min\r\n" +
 		"Content-Type: text/html; charset=UTF-8\r\n\r\n" +
 		body + "\r\n")
 
 	auth := smtp.PlainAuth("", "awsusername", password, smtpHost)
 
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, to, message)
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, []string{to}, message)
 	if err != nil {
-		fmt.Println("[logart] SendMail error:", err)
+		fmt.Println("[ermon] SendMail error:", err)
 		return
 	}
 }
@@ -170,18 +170,22 @@ func sendErrorsByEmail(errors string) {
 var mailTemplate = `
 <html>
   <meta charset="utf-8" />
-  <body style="background-color: #f4f5f6">
-    <div style="margin: 0; background-color: #f4f5f6; padding: 30px; font-family: sans-serif;">
+  <body style="background-color: #f4f5f6; font-family: sans-serif;">
+    <div style="margin-top: 30px; font: bold italic 35px arial, sans-serif;
+                background-color: #b6bdc3; color: transparent; text-shadow: 1px 1px 1px rgba(255,255,255,0.5);
+                -webkit-background-clip: text; -moz-background-clip: text; background-clip: text; text-align: center;">
+      ermon
+    </div>
+    <div style="margin: 0; background-color: #f4f5f6; padding: 30px;">
       <div
-        style="background-color: #fff; padding: 20px; border-radius: 4px; font-size: 15px; color: #000;">
+        style="background-color: #fff; padding: 20px; border-radius: 4px; font-size: 15px; color: #333;">
         <pre style="font-family: monospace">
 {errors}
         </pre>
       </div>
-      <div
-        style="margin-top: 20px; padding: 10px; font-size: 15px; color: #9a9ea6; text-align: center;">
+      <div style="margin-top: 20px; padding: 10px; font-size: 15px; color: #9a9ea6; text-align: center;">
         This email alert was produced by
-        <a href="https://github.com/gornostal/logart" style="color: #9a9ea6; text-decoration: underline">logart</a>.
+        <a href="https://github.com/gornostal/ermon" style="color: #9a9ea6; text-decoration: underline">ermon</a>.
       </div>
     </div>
   </body>
@@ -193,6 +197,6 @@ func main() {
 
 	readLogs(os.Stdin)
 
-	lastRun = true
+	finalRun = true
 	sendLogsByEmail()
 }
