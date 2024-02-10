@@ -1,3 +1,4 @@
+```
 #!/usr/bin/env bash
 
 set -o pipefail
@@ -5,3 +6,4 @@ set -o pipefail
 false | echo okkk
 
 exit $?
+```
