@@ -27,3 +27,4 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: ermon
+          token: ${{ secrets.GITHUB_TOKEN }}
