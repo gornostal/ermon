@@ -169,8 +169,10 @@ func readLogs(cfg Config, r io.Reader) {
 }
 
 func lineContainsError(cfg Config, input string) bool {
-	if cfg.IgnorePattern.MatchString(input) {
-		return false
+	if cfg.IgnorePattern != nil {
+		if cfg.IgnorePattern.MatchString(input) {
+			return false
+		}
 	}
 	if cfg.MatchPattern.MatchString(input) {
 		return true
