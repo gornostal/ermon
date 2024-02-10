@@ -29,8 +29,8 @@ You pass the output (logs) of your application to ermon, and it will send you an
 Copy and update the sample configuration provided below. Save it with any name, for example `.ermon`.
 
 ```ini
-# Each configuration option below can be also provided as via ENVIRONMENT VARIABLES variables!
-# Values from the configuration file will take precedence over environment variables.
+# Each configuration option below can be also provided as via ENVIRONMENT VARIABLES variables.
+# They take precedence over the configuration file.
 
 # [required] SMTP server host.
 # If you own a domain and have AWS account, the easiest way to send emails is to use AWS SES.

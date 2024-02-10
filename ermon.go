@@ -250,17 +250,9 @@ func parseConfig(filename string) (*Config, error) {
 
 	cfg := &Config{}
 
-	// read environment variables first
-	cfg.SMTPHost = os.Getenv("SMTP_HOST")
-	cfg.SMTPPort = os.Getenv("SMTP_PORT")
-	cfg.SMTPUsername = os.Getenv("SMTP_USERNAME")
-	cfg.SMTPPassword = os.Getenv("SMTP_PASSWORD")
-	cfg.AppName = os.Getenv("ERMON_APP_NAME")
-	cfg.MailFrom = os.Getenv("ERMON_MAIL_FROM")
-	cfg.MailTo = os.Getenv("ERMON_MAIL_TO")
-	matchPattern := os.Getenv("ERMON_MATCH_PATTERN")
-	ignorePattern := os.Getenv("ERMON_IGNORE_PATTERN")
-	maxEmailsPerHour := os.Getenv("ERMON_MAX_EMAILS_PER_HOUR")
+	var matchPattern string
+	var ignorePattern string
+	var maxEmailsPerHour string
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -275,7 +267,6 @@ func parseConfig(filename string) (*Config, error) {
 			continue
 		}
 
-		// values from the config file take precedence
 		switch strings.TrimSpace(parts[0]) {
 		case "SMTP_HOST":
 			cfg.SMTPHost = strings.TrimSpace(parts[1])
@@ -299,6 +290,18 @@ func parseConfig(filename string) (*Config, error) {
 			maxEmailsPerHour = strings.TrimSpace(parts[1])
 		}
 	}
+
+	// read environment variables after the config file
+	cfg.SMTPHost = eitherAorB(cfg.SMTPHost, os.Getenv("SMTP_HOST"))
+	cfg.SMTPPort = eitherAorB(cfg.SMTPPort, os.Getenv("SMTP_PORT"))
+	cfg.SMTPUsername = eitherAorB(cfg.SMTPUsername, os.Getenv("SMTP_USERNAME"))
+	cfg.SMTPPassword = eitherAorB(cfg.SMTPPassword, os.Getenv("SMTP_PASSWORD"))
+	cfg.AppName = eitherAorB(cfg.AppName, os.Getenv("ERMON_APP_NAME"))
+	cfg.MailFrom = eitherAorB(cfg.MailFrom, os.Getenv("ERMON_MAIL_FROM"))
+	cfg.MailTo = eitherAorB(cfg.MailTo, os.Getenv("ERMON_MAIL_TO"))
+	matchPattern = eitherAorB(matchPattern, os.Getenv("ERMON_MATCH_PATTERN"))
+	ignorePattern = eitherAorB(ignorePattern, os.Getenv("ERMON_IGNORE_PATTERN"))
+	maxEmailsPerHour = eitherAorB(maxEmailsPerHour, os.Getenv("ERMON_MAX_EMAILS_PER_HOUR"))
 
 	// validate all fields are present in the loop
 	for k, v := range map[string]string{
@@ -342,6 +345,13 @@ func parseConfig(filename string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func eitherAorB(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 func main() {
