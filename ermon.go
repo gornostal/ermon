@@ -20,6 +20,7 @@ const runningTimeWindow = time.Minute * 2
 const maxEmailBufferSize = 5
 const maxLogBufferSize = 15
 
+var version = "X.Y.Z"
 var debug = os.Getenv("ERMON_DEBUG") == "true"
 var emailsSent []time.Time
 var finalRun bool = false
@@ -344,7 +345,7 @@ func main() {
 		cfgPath = os.Args[1]
 
 		if cfgPath == "-h" || cfgPath == "--help" || cfgPath == "version" {
-			fmt.Println("ermon v{version}")
+			fmt.Println("ermon v" + version + " by Oleksandr Gornostal")
 			fmt.Println("\033[37mFor usage and configuration, see https://github.com/gornostal/ermon\033[0m")
 			os.Exit(0)
 		}
