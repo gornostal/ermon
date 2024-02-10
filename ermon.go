@@ -101,13 +101,13 @@ func watchLogBuffer(cfg Config) {
 			return
 		}
 
-		time.Sleep(time.Second)
+		time.Sleep(time.Second * 30)
 	}
 }
 
 func readLogs(cfg Config, r io.Reader) {
 	scanner := bufio.NewScanner(r)
-	const contextSize = 3
+	const contextSize = 10
 	var i uint64 = 0 // line number
 	var last3lines [contextSize]string
 
@@ -195,7 +195,7 @@ func sendMail(cfg Config, errors string, errorCount int) {
 	recipients := []string{cfg.MailTo}
 	message := []byte("From: " + cfg.MailFrom + "\r\n" +
 		"To: " + cfg.MailTo + "\r\n" +
-		"Subject: [" + cfg.AppName + "] You've got " + errorCountString + " errors\r\n" +
+		"Subject: [Alert] " + cfg.AppName + "encountered " + errorCountString + " error(s)\r\n" +
 		"Content-Type: text/html; charset=UTF-8\r\n\r\n" +
 		body + "\r\n")
 
@@ -216,7 +216,7 @@ var mailTemplate = `
       ermon
     </div>
     <div style="padding: 30px;">
-      <div style="background-color: #fff; padding: 20px; border-radius: 4px; font-size: 15px; color: #808080;">
+      <div style="background-color: #fff; padding: 20px; border-radius: 4px; font-size: 14px; color: #808080;">
         <pre style="font-family: monospace; white-space: pre-wrap;">{errors}</pre>
       </div>
       <div style="margin-top: 20px; padding: 10px; font-size: 15px; color: #9a9ea6; text-align: center;">
