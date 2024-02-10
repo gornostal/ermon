@@ -18,7 +18,7 @@ var sendLogsMutex = &sync.Mutex{} // needed for concurrent access to the emailBu
 var startupTime = time.Now()      // uses this time so we don't send emails if the app crashes while running for less than 1 minute
 const runningTimeWindow = time.Minute * 2
 const maxEmailBufferSize = 5
-const maxLogBufferSize = 15
+const maxContextBuffer = 8
 
 var version = "X.Y.Z"
 var debug = os.Getenv("ERMON_DEBUG") == "true"
@@ -107,9 +107,8 @@ func watchLogBuffer(cfg Config) {
 
 func readLogs(cfg Config, r io.Reader) {
 	scanner := bufio.NewScanner(r)
-	const contextSize = 10
 	var i uint64 = 0 // line number
-	var last3lines [contextSize]string
+	var runningContextBuffer [maxContextBuffer]string
 
 	for scanner.Scan() {
 		i++
@@ -120,47 +119,54 @@ func readLogs(cfg Config, r io.Reader) {
 			continue
 		}
 
-		var bufferIsFull bool = len(emailBuffer) >= maxEmailBufferSize || len(logBuffer) >= maxLogBufferSize
-		if bufferIsFull {
-			// wait for the logBuffers to be consumed
-			if len(logBuffer) > 0 {
-				logBuffer = nil
-			}
+		enoughContextInLogBuffer := len(logBuffer) > maxContextBuffer*3
+
+		if enoughContextInLogBuffer {
+			emailBuffer = append(emailBuffer, logBuffer)
+			logBuffer = nil
+			lastErrorLineIndex = 0
+		}
+
+		if len(emailBuffer) >= maxEmailBufferSize {
+			// wait for the emailBuffer to be consumed
 			continue
 		}
 
 		if lineContainsError(cfg, line) {
 			// record the time so we can track number of errors per configured time period
 			// this time will be reset when email is sent
-			if timeSinceError.IsZero() {
-				timeSinceError = time.Now()
+			timeSinceError = time.Now()
+
+			if lastErrorLineIndex == 0 {
+				logBuffer = append(logBuffer, runningContextBuffer[:]...)
 			}
 
-			if lastErrorLineIndex == 0 || (i-lastErrorLineIndex) > contextSize {
-				if len(logBuffer) > 0 {
-					emailBuffer = append(emailBuffer, logBuffer)
-					logBuffer = nil
-				}
-				logBuffer = append(logBuffer, last3lines[:]...)
+			if !enoughContextInLogBuffer {
 				logBuffer = append(logBuffer, line)
 			}
-
 			lastErrorLineIndex = i
 		}
 
-		// maintain a buffer of last 3 lines
-		if len(last3lines) >= 3 {
-			copy(last3lines[:], last3lines[1:])
-			last3lines[2] = line
+		// maintain a buffer of last contextSize
+		if len(runningContextBuffer) >= maxContextBuffer {
+			copy(runningContextBuffer[:], runningContextBuffer[1:])
+			runningContextBuffer[maxContextBuffer-1] = line
 		} else {
-			last3lines[len(logBuffer)] = line
+			runningContextBuffer[len(logBuffer)] = line
 		}
 
-		// add a bit of context after an error
-		if lastErrorLineIndex > 0 && lastErrorLineIndex != i && (i-lastErrorLineIndex) <= contextSize {
+		// keep adding some context after an error occurs
+		notTooFarFromLastError := lastErrorLineIndex > 0 && lastErrorLineIndex != i && (i-lastErrorLineIndex) < maxContextBuffer
+		if notTooFarFromLastError && !enoughContextInLogBuffer {
 			logBuffer = append(logBuffer, line)
 		}
 
+		// push log buffer to email buffer
+		if len(logBuffer) > 0 && (i-lastErrorLineIndex) == maxContextBuffer {
+			emailBuffer = append(emailBuffer, logBuffer)
+			logBuffer = nil
+			lastErrorLineIndex = 0
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -195,7 +201,7 @@ func sendMail(cfg Config, errors string, errorCount int) {
 	recipients := []string{cfg.MailTo}
 	message := []byte("From: " + cfg.MailFrom + "\r\n" +
 		"To: " + cfg.MailTo + "\r\n" +
-		"Subject: [Alert] " + cfg.AppName + "encountered " + errorCountString + " error(s)\r\n" +
+		"Subject: [Alert] " + cfg.AppName + " reported " + errorCountString + " error(s)\r\n" +
 		"Content-Type: text/html; charset=UTF-8\r\n\r\n" +
 		body + "\r\n")
 
