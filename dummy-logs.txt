@@ -1,0 +1,20 @@
+[2022-04-10 14:51:24] INFO: User 'admin' has logged in from IP 182.45.66.78
+[2022-04-10 14:51:26] INFO: User 'admin' started the 'Backup' task
+[2022-04-10 14:52:32] INFO: Server 'Server-1' disk space: 50 GB free, 100 GB total
+[2022-04-10 14:54:08] INFO: 'Backup' task is in-progress, completed 20%
+[2022-04-10 14:56:14] INFO: 'Backup' task is in-progress, completed 50%
+[2022-04-10 14:58:20] INFO: 'Backup' task is in-progress, completed 80%
+[2022-04-10 15:00:35] INFO: 'Backup' task has successfully completed
+[2022-04-10 15:00:48] INFO: User 'admin' started the 'Disk Cleanup' task on 'Server-1'
+[2022-04-10 15:03:10] INFO: 'Disk Cleanup' task is 35% complete on 'Server-1'
+[2022-04-10 15:04:25] ERROR: 'Disk Cleanup' task has failed - Insufficient disk space
+[2022-04-10 15:04:30] INFO: Server 'Server-2' health: All systems functional
+[2022-04-10 15:07:40] INFO: User 'admin' started the 'System Update' task on 'Server-2'
+[2022-04-10 15:09:47] INFO: 'System Update' task is in-progress, 60% completed on 'Server-2'
+[2022-04-10 15:10:20] ERROR: 'System Update' task failed - Network connection timeout
+[2022-04-10 15:13:25] INFO: User 'admin' initiated server reboot on 'Server-2'
+[2022-04-10 15:15:31] INFO: Server 'Server-2' has successfully rebooted
+[2022-04-10 15:15:40] INFO: User 'admin' has logged out
+[2022-04-10 15:16:02] INFO: User 'John Doe' has logged in from IP 178.76.15.45
+[2022-04-10 15:16:15] INFO: User 'John Doe' has started 'Software Installation' task on 'Server-2'
+[2022-04-10 15:17:50] ERROR: 'Software Installation' task failed - Unsupported software version

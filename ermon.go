@@ -82,7 +82,7 @@ func sendLogsByEmail(cfg Config) {
 			}
 		}
 		if i < len(emailBuffer)-1 {
-			errors += "<br />\n"
+			errors += "…<br />\n"
 		}
 	}
 
@@ -186,7 +186,10 @@ func sendMail(cfg Config, errors string, errorCount int) {
 
 	errorCountString := strconv.Itoa(errorCount)
 	body := strings.Replace(mailTemplate, "{errors}", errors, -1)
-	auth := smtp.PlainAuth("", cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPHost)
+	var auth smtp.Auth
+	if cfg.SMTPUsername != "" && cfg.SMTPPassword != "" {
+		auth = smtp.PlainAuth("", cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPHost)
+	}
 	recipients := []string{cfg.MailTo}
 	message := []byte("From: " + cfg.MailFrom + "\r\n" +
 		"To: " + cfg.MailTo + "\r\n" +
@@ -212,11 +215,11 @@ var mailTemplate = `
     </div>
     <div style="padding: 30px;">
       <div style="background-color: #fff; padding: 20px; border-radius: 4px; font-size: 15px; color: #808080;">
-        <pre style="font-family: monospace">{errors}</pre>
+        <pre style="font-family: monospace; white-space: pre-wrap;">{errors}</pre>
       </div>
       <div style="margin-top: 20px; padding: 10px; font-size: 15px; color: #9a9ea6; text-align: center;">
         This email alert was produced by
-        <a href="https://github.com/gornostal/ermon" style="color: #9a9ea6; text-decoration: underline">ermon</a>.
+        <a href="https://github.com/gornostal/ermon" style="color: #9a9ea6; text-decoration: underline">ermon</a> v` + version + `
       </div>
     </div>
   </body>
